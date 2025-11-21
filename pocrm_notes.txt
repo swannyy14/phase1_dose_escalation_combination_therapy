@@ -1,0 +1,9 @@
+
+lpocrm function:
+  - alpha: matrix of skeleton (column: doses, row: different partial order)
+
+bcrml function:
+  - a: first argument; parameter to be estimated
+  - p1: vector of the skeleton
+  - y: 
+
