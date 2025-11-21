@@ -221,8 +221,7 @@ get_next_dose_po_tite_crm <- function(
   if (est_p[1] <= target_p) {
     next_dose <- po[max(which(est_p <= target_p))]
   } else {
-    warning("Min dose below target")
-    stop()
+    next_dose <- 1
   }
   
   
@@ -289,7 +288,7 @@ names(true_tox_vec) <- c("P0.5+H2", "P0.5+H3", "P0.5+H5",
 print(true_tox_vec)
 
 # number of partial orderings
-M <- 3
+M <- 4
 # Number of treatment combinations
 K <- length(true_tox_vec)
 
@@ -298,12 +297,13 @@ po_mat <- matrix(NA, nrow = M, ncol = K)
 po_mat[1,] <- c(1,2,3,4,5,6,7,8,9)
 po_mat[2,] <- c(1,4,7,2,5,8,3,6,9)
 po_mat[3,] <- c(1,2,4,3,5,7,6,8,9)
+po_mat[4,] <- c(1,4,2,7,5,3,8,6,9)
 
 print(po_mat)
 
 # matrix of skeleton corresponding for each partial ordering
 skeleton_mat <- matrix(
-  rep(c(0.05, 0.08, 0.10, 0.13, 0.15, 0.18, 0.22, 0.25, 0.35), 3),
+  rep(c(0.05, 0.08, 0.10, 0.13, 0.15, 0.18, 0.22, 0.25, 0.35), M),
   nrow = M, ncol = K, byrow = TRUE
 )
 print(skeleton_mat)
@@ -383,16 +383,35 @@ begin_sim <- function(
     } else if (all(response == 1)) {
       # if all toxic response
       if (verbose) print("Both toxicity observed at beginning")
-      return(patient_data)
-    } else if (all(response == 0)) {
+      
+      sim_result <- list(
+        data = patient_data$data,
+        n_enrolled = patient_data$n_enrolled,
+        MTD = 1
+      )
+      
+      return(sim_result)
+    } else {
       # if all no response
       if (zone < 5) {
         zone <- zone + 1
-        next_dose <- sample(rep(treatments_by_zone[[zone]], 2), 1)
+        next_dose <- treatments_by_zone[[zone]][sample(length(treatments_by_zone[[zone]]), 1)]
       } else {
-        # stop trial, return patients data
-        if (verbose) print("No toxicity observed until the end of trial")
-        return(patient_data)
+        # it could be that there's delayed DLT for dose 9
+        if (!all(tox_time == 0)) {
+          # assume we wait 1 more month to wait for DLT to show up
+          current_date <- 30
+          is_step1_phase <- FALSE
+        } else {
+          # stop trial, return patients data
+          sim_result <- list(
+            data = patient_data$data,
+            n_enrolled = patient_data$n_enrolled,
+            MTD = 9
+          )
+          return(sim_result)
+        }
+        
       }
     }
   }
@@ -421,33 +440,42 @@ begin_sim <- function(
     
     current_date <- current_date + 30
     
-    po_tite_crm_out <- get_next_dose_po_tite_crm(
-      patient_data = patient_data,
-      current_date = current_date,
-      po_mat = po_mat,
-      skeleton_mat = skeleton_mat
-    )
+    if (patient_data$n_enrolled != 25) {
+      po_tite_crm_out <- get_next_dose_po_tite_crm(
+        patient_data = patient_data,
+        current_date = current_date,
+        po_mat = po_mat,
+        skeleton_mat = skeleton_mat
+      )
+    } else {
+      # get MTD
+      po_tite_crm_out <- get_next_dose_po_tite_crm(
+        patient_data = patient_data,
+        current_date = current_date + 30,
+        po_mat = po_mat,
+        skeleton_mat = skeleton_mat
+      )
+    }
     
     next_dose <- po_tite_crm_out$next_dose
   }
   
-  return(patient_data)
+  sim_result <- list(
+    data = patient_data$data,
+    n_enrolled = patient_data$n_enrolled,
+    MTD = next_dose
+  )
+  
+  return(sim_result)
   
 }
 
+set.seed(17)
 patient_data <- begin_sim(
   true_tox_vec = true_tox_vec,
   po_mat = po_mat,
   skeleton_mat = skeleton_mat, 
   verbose = TRUE
-)
-
-# following is equivalent to MTD
-get_next_dose_po_tite_crm(
-    patient_data = patient_data,
-    current_date = 1000,
-    po_mat = po_mat,
-    skeleton_mat = skeleton_mat
 )
 
 
