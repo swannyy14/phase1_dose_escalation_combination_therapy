@@ -73,7 +73,8 @@ enroll_patient <- function(
     enrollment_date,
     assigned_dose,
     true_tox_vec,
-    n = NULL
+    n = NULL,
+    verbose = FALSE
   ) {
   n_enrolled <- patient_data$n_enrolled
   
@@ -86,6 +87,12 @@ enroll_patient <- function(
   }
   
   for (i in 1:n) {
+    if (verbose) 
+      print(paste0(
+        "Enrolling new patient: date - ", enrollment_date,
+        ", dose - ", assigned_dose,
+        ", toxic prob - ", true_tox_vec[assigned_dose])
+      )
     patient_data$data[n_enrolled + i, "enrollment_date"] <- enrollment_date
     patient_data$data[n_enrolled + i, "dose_assignment"] <- assigned_dose
     tox <- rbinom(1, 1, true_tox_vec[assigned_dose])
@@ -343,6 +350,7 @@ begin_sim <- function(
     1,
     c(2,4),
     c(3,5,7),
+    c(3,5,7),
     c(6,8),
     9
   )
@@ -356,7 +364,8 @@ begin_sim <- function(
       enrollment_date = current_date, 
       assigned_dose = next_dose,
       true_tox_vec = true_tox_vec,
-      n = 2
+      n = 2,
+      verbose = verbose
     )
     
     # set current date to next recruitment date
@@ -393,7 +402,7 @@ begin_sim <- function(
       return(sim_result)
     } else {
       # if all no response
-      if (zone < 5) {
+      if (zone < 6) {
         zone <- zone + 1
         next_dose <- treatments_by_zone[[zone]][sample(length(treatments_by_zone[[zone]]), 1)]
       } else {
@@ -435,7 +444,8 @@ begin_sim <- function(
       patient_data, 
       enrollment_date = current_date, 
       assigned_dose = next_dose,
-      true_tox_vec = true_tox_vec
+      true_tox_vec = true_tox_vec,
+      verbose = verbose
     )
     
     current_date <- current_date + 30
@@ -471,7 +481,7 @@ begin_sim <- function(
 }
 
 set.seed(17)
-patient_data <- begin_sim(
+sim_data <- begin_sim(
   true_tox_vec = true_tox_vec,
   po_mat = po_mat,
   skeleton_mat = skeleton_mat, 
@@ -480,4 +490,49 @@ patient_data <- begin_sim(
 
 
 ```
+
+Now write function that simulates a give number of times
+
+```{r}
+simulate_trials <- function(
+  true_tox_vec,
+  po_mat,
+  skeleton_mat,
+  target_pt = 0.25,
+  N = 100,
+  verbose = FALSE
+) {
+  operating_char <- list(
+    MTD = integer(N),
+    n_enrolled = integer(N),
+    adverse_event_rate = numeric(N)
+  )
+  
+  for (i in 1:N) {
+    sim_data <- begin_sim(
+      true_tox_vec = true_tox_vec,
+      po_mat = po_mat,
+      skeleton_mat = skeleton_mat,
+      target_pt = 0.25,
+      verbose = verbose
+    )
+    
+    operating_char[["MTD"]][i] <- sim_data$MTD
+    operating_char[["n_enrolled"]][i] <- sim_data$n_enrolled
+    operating_char[["adverse_event_rate"]][i] <- mean(sim_data$data$tox)
+  }
+  
+  return(operating_char)
+}
+
+# debug(simulate_trials)
+
+opchar <- simulate_trials(
+  true_tox_vec = true_tox_vec,
+  po_mat = po_mat,
+  skeleton_mat = skeleton_mat
+)
+table(opchar$MTD)
+```
+
 
