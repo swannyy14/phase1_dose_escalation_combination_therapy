@@ -75,7 +75,7 @@ enroll_patient <- function(
     true_tox_vec,
     n = NULL,
     verbose = FALSE
-  ) {
+) {
   n_enrolled <- patient_data$n_enrolled
   
   if (is.null(n)) {
@@ -171,15 +171,15 @@ calc_weight <- function(current_time, followup_time) {
 
 ```{r}
 get_next_dose_po_tite_crm <- function(
-  patient_data,
-  current_date,
-  po_mat,
-  skeleton_mat,
-  target_p = 0.25
+    patient_data,
+    current_date,
+    po_mat,
+    skeleton_mat,
+    target_pt = 0.25
 ) {
   n_enrolled <- patient_data$n_enrolled
   M <- nrow(po_mat)
-
+  
   # get the response and weights as vectors
   response <- patient_data$data$tox[1:n_enrolled]
   tox_time <- patient_data$data$time_to_tox[1:n_enrolled]
@@ -200,7 +200,7 @@ get_next_dose_po_tite_crm <- function(
   # calculate mle for each partial ordering
   # and identify "best" partial order
   dose_assignment <- patient_data$data$dose_assignment[1:n_enrolled]
-
+  
   a_mle <- numeric(M)
   log_lik <- numeric(M)
   
@@ -225,8 +225,8 @@ get_next_dose_po_tite_crm <- function(
   est_p <- skeleton_mat[chosen_po,]^a_mle[chosen_po]
   
   # return maximum dose under target P(DLT)
-  if (est_p[1] <= target_p) {
-    next_dose <- po[max(which(est_p <= target_p))]
+  if (est_p[1] <= target_pt) {
+    next_dose <- po[max(which(est_p <= target_pt))]
   } else {
     next_dose <- 1
   }
@@ -320,17 +320,18 @@ Now to write code for one round of simulation
 
 ```{r}
 begin_sim <- function(
-  true_tox_vec,
-  po_mat,
-  skeleton_mat,
-  target_pt = 0.25,
-  verbose = FALSE
+    true_tox_vec,
+    po_mat,
+    skeleton_mat,
+    target_pt = 0.25,
+    max_patients = 25,
+    verbose = FALSE
 ) {
   
   # initiate patient data
   patient_data <- list(
     data = data.frame(
-      patient_id = seq(1, N),
+      patient_id = seq(1, max_patients),
       enrollment_date = NA,
       dose_assignment = NA,
       tox = NA,
@@ -346,17 +347,12 @@ begin_sim <- function(
   # begin with first dose
   next_dose <- 1
   zone <- 1 # for initial dose escalation
-  treatments_by_zone <- list(
-    1,
-    c(2,4),
-    c(3,5,7),
-    c(3,5,7),
-    c(6,8),
-    9
+  treatment_esc_order <- c(
+    1,2,4,3,5,7,6,8,9
   )
   
   if (verbose) print("Begin step 1...")
-  while (is_step1_phase & patient_data$n_enrolled < 25) {
+  while (is_step1_phase & patient_data$n_enrolled < max_patients) {
     
     # enroll 2 patients
     patient_data <- enroll_patient(
@@ -402,9 +398,9 @@ begin_sim <- function(
       return(sim_result)
     } else {
       # if all no response
-      if (zone < 6) {
+      if (zone < 9) {
         zone <- zone + 1
-        next_dose <- treatments_by_zone[[zone]][sample(length(treatments_by_zone[[zone]]), 1)]
+        next_dose <- treatment_esc_order[[zone]][sample(length(treatment_esc_order[[zone]]), 1)]
       } else {
         # it could be that there's delayed DLT for dose 9
         if (!all(tox_time == 0)) {
@@ -433,13 +429,14 @@ begin_sim <- function(
     patient_data = patient_data,
     current_date = current_date,
     po_mat = po_mat,
-    skeleton_mat = skeleton_mat
+    skeleton_mat = skeleton_mat,
+    target_pt = target_pt
   )
   
   next_dose <- po_tite_crm_out$next_dose
   
   # continue dose finding until 25 patients are enrolled
-  while (patient_data$n_enrolled < 25) {
+  while (patient_data$n_enrolled < max_patients) {
     patient_data <- enroll_patient(
       patient_data, 
       enrollment_date = current_date, 
@@ -450,7 +447,11 @@ begin_sim <- function(
     
     current_date <- current_date + 30
     
-    if (patient_data$n_enrolled != 25) {
+    if (patient_data$n_enrolled > max_patients) {
+      stop("n_enrolled cannot be higher than max_patients")
+    }
+    
+    if (patient_data$n_enrolled != max_patients) {
       po_tite_crm_out <- get_next_dose_po_tite_crm(
         patient_data = patient_data,
         current_date = current_date,
@@ -495,12 +496,12 @@ Now write function that simulates a give number of times
 
 ```{r}
 simulate_trials <- function(
-  true_tox_vec,
-  po_mat,
-  skeleton_mat,
-  target_pt = 0.25,
-  N = 100,
-  verbose = FALSE
+    true_tox_vec,
+    po_mat,
+    skeleton_mat,
+    target_pt = 0.25,
+    N = 100,
+    verbose = FALSE
 ) {
   operating_char <- list(
     MTD = integer(N),
@@ -526,13 +527,83 @@ simulate_trials <- function(
 }
 
 # debug(simulate_trials)
+```
+
+Run simulation
+
+```{r}
+# true toxicity matrix
+true_tox_mat <- matrix(c(
+  0.05, 0.09, 0.13, 
+  0.15, 0.2 , 0.25,
+  0.29, 0.32, 0.35
+  ), byrow = TRUE, nrow = 3, ncol = 3)
+true_tox_vec <- dlt_mat_to_vec <- as.vector(true_tox_mat)
+names(true_tox_vec) <- c("P0.5+H2", "P0.5+H3", "P0.5+H5", 
+                         "P0.75+H2", "P0.75+H3", "P0.75+H5",
+                         "P1.0+H2", "P1.0+H3", "P1.0+H5")
+print(true_tox_vec)
+
+# number of partial orderings
+M <- 4
+# Number of treatment combinations
+K <- length(true_tox_vec)
+
+# matrix of partial ordering
+po_mat <- matrix(NA, nrow = M, ncol = K)
+po_mat[1,] <- c(1,2,3,4,5,6,7,8,9)
+po_mat[2,] <- c(1,4,7,2,5,8,3,6,9)
+po_mat[3,] <- c(1,2,4,3,5,7,6,8,9)
+po_mat[4,] <- c(1,4,2,7,5,3,8,6,9)
+
+print(po_mat)
+
+# matrix of skeleton corresponding for each partial ordering
+skeleton_mat <- matrix(
+  rep(c(0.05, 0.08, 0.10, 0.13, 0.15, 0.18, 0.22, 0.25, 0.35), M),
+  nrow = M, ncol = K, byrow = TRUE
+)
+print(skeleton_mat)
 
 opchar <- simulate_trials(
   true_tox_vec = true_tox_vec,
   po_mat = po_mat,
   skeleton_mat = skeleton_mat
 )
-table(opchar$MTD)
+
+true_tox_vec
+table(opchar$MTD) / length(opchar$MTD)
 ```
 
+```{r}
+library(dfcrm)
+
+po_index <- 3
+trueprob <- true_tox_vec[po_mat[po_index,]]
+prior <- skeleton_mat[po_index,]
+target <- 0.25
+n <- 25
+x0 <- c(1,1,1,2,2,4,4,3,3,5,5,6,6,9,9)
+nsim <- 1000
+obswin <- 56
+tgrp <- 30
+rate <- 1.5
+accrual <- "fixed"
+
+# compare to my method
+
+myout <- titesim(
+  PI = trueprob, prior = prior, target = target, n = n, x0 = 1,
+  nsim = nsim, obswin = obswin, tgrp = tgrp, rate = rate, accrual = accrual,
+  seed = 123, restrict = FALSE
+)
+
+myout2 <- titesim(
+  PI = trueprob, prior = prior, target = target, n = n, x0 = 1,
+  nsim = nsim, obswin = obswin, tgrp = tgrp, rate = rate, accrual = accrual,
+  seed = 123, restrict = TRUE
+)
+
+
+```
 
