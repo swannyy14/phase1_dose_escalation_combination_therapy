@@ -68,9 +68,14 @@ generate_orderings_matrix <- function(grid) {
   return(po_mat)
 }
 
-generate_skeleton_mat <- function(po_mat) {
-  skeleton_mat <- matrix(
-    rep(c(0.05, 0.08, 0.10, 0.13, 0.15, 0.18, 0.22, 0.25, 0.35), nrow(po_mat)),
-    nrow = nrow(po_mat), ncol = ncol(po_mat), byrow = TRUE
-  )
+generate_skeleton_mat <- function(po_mat, skeleton_vec) {
+  d <- length(skeleton_vec)
+  s <- nrow(po_mat)
+  skeleton_mat <- matrix(0, nrow = s, ncol = d)
+  
+  for (j in 1:s) {
+    skeleton_mat[j, ] <- skeleton_vec[order(po_mat[j, ])]
+  }
+  
+  return(skeleton_mat)
 }
