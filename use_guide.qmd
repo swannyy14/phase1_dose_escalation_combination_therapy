@@ -23,10 +23,12 @@ if (!requireNamespace("nnet", quietly = TRUE)) {
 }
 ```
 
-All the necessary functions are in `R/po_tite_crm.R`, so you can run the following code to load all the functions.
+Functions about PO_TITE_CRM are in `R/po_tite_crm.R`. Functions about generating matrices are in 
+`R/generate_mat.R` so you can run the following code to load all the functions.
 
 ```{r}
 source("R/po_tite_crm.R")
+source("R/generate_mat.R")
 ```
 
 For running simulation, you need the following:
@@ -39,7 +41,7 @@ For running simulation, you need the following:
 
 4. Target toxicity probability (`target_pt`). Max toxicity probability that will be tolerated.
 
-5. Max patients (`max_patients`). Total niumber of patients to accrue.
+5. Max patients (`max_patients`). Total number of patients to accrue.
 
 ```{r}
 # true toxicity matrix
@@ -55,21 +57,15 @@ names(true_tox_vec) <- c("P0.5+H2", "P0.5+H3", "P0.5+H5",
 print("True toxicity probability vector:")
 print(true_tox_vec)
 
-# matrix of partial ordering
-po_mat <- matrix(NA, nrow = 4, ncol = 9)
-po_mat[1,] <- c(1,2,3,4,5,6,7,8,9)
-po_mat[2,] <- c(1,4,7,2,5,8,3,6,9)
-po_mat[3,] <- c(1,2,4,3,5,7,6,8,9)
-po_mat[4,] <- c(1,4,2,7,5,3,8,6,9)
+# matrix of dose grid and partial ordering
+dose_grid <- generate_dose_grid(true_tox_mat)
+po_mat <- generate_orderings_matrix(dose_grid)
 
 print("Partial ordering matrix:")
 print(po_mat)
 
 # matrix of skeleton corresponding for each partial ordering
-skeleton_mat <- matrix(
-  rep(c(0.05, 0.08, 0.10, 0.13, 0.15, 0.18, 0.22, 0.25, 0.35), 4),
-  nrow = 4, ncol = 9, byrow = TRUE
-)
+skeleton_mat <- generate_skeleton_mat(po_mat)
 
 print("Skeleton matrix:")
 print(skeleton_mat)
@@ -126,6 +122,7 @@ simulate_trials <- function(
   
   return(operating_char)
 }
+
 
 op_char <- simulate_trials(
   true_tox_vec = true_tox_vec,
