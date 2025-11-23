@@ -37,7 +37,7 @@ For running simulation, you need the following:
 
 2. Matrix of partial ordering (`po_mat`). Each row corresponds to ordering of K doses. For each row, the entry corresponds to the index of the dose level represented in the true toxicity probability vector. Number of partial ordering can be arbitrary. If there's only one ordering, then PO-TITE-CRM reduces to TITE-CRM.
 
-3. Matrix of skeletons (`skeleton_mat`) for each partial ordering. For each partial ordering, prior toxicity probability is assigned for each dose level. The probabilities in each row should be monotonically increasing.
+3. Vector of skeletons (`skeleton_vec`) for one partial ordering. For a single partial ordering, prior toxicity probability is assigned for each dose level. The probabilities in each row should be monotonically increasing. The matrix of skeletons can be generate using `generate_skeleton_mat` according to the generated matrix of partial ordering (`po_mat`)
 
 4. Target toxicity probability (`target_pt`). Max toxicity probability that will be tolerated.
 
@@ -65,7 +65,8 @@ print("Partial ordering matrix:")
 print(po_mat)
 
 # matrix of skeleton corresponding for each partial ordering
-skeleton_mat <- generate_skeleton_mat(po_mat)
+skeleton_vec <- c(0.05, 0.08, 0.10, 0.13, 0.15, 0.18, 0.22, 0.25, 0.35)
+skeleton_mat <- generate_skeleton_mat(po_mat, skeleton_vec)
 
 print("Skeleton matrix:")
 print(skeleton_mat)
