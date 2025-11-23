@@ -169,13 +169,8 @@ begin_sim <- function(
   # begin with first dose
   next_dose <- 1
   zone <- 1 # for initial dose escalation
-  treatments_by_zone <- list(
-    1,
-    c(2,4),
-    c(3,5,7),
-    c(3,5,7),
-    c(6,8),
-    9
+  treatment_esc_order <- c(
+    1,2,4,3,5,7,6,8,9
   )
   
   if (verbose) print("Begin step 1...")
@@ -225,9 +220,9 @@ begin_sim <- function(
       return(sim_result)
     } else {
       # if all no response
-      if (zone < 6) {
+      if (zone < 9) {
         zone <- zone + 1
-        next_dose <- treatments_by_zone[[zone]][sample(length(treatments_by_zone[[zone]]), 1)]
+        next_dose <- treatment_esc_order[[zone]][sample(length(treatment_esc_order[[zone]]), 1)]
       } else {
         # it could be that there's delayed DLT for dose 9
         if (!all(tox_time == 0)) {

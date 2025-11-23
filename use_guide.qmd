@@ -1,0 +1,144 @@
+---
+title: "Use Instructions"
+format: html
+---
+
+# Introduction
+
+This notebook goes over how to simulate PO-TITE-CRM. Either create a new notebook file (`*.rmd` or `*.qmd` works) or copy this notebook and follow instuctions.
+
+# How to Use
+
+It's recomended that you install and load the following packages.
+
+```{r}
+if (!requireNamespace("tidyverse", quietly = TRUE)) {
+  install.packages("tidyverse")
+  library(tidyverse)
+}
+
+if (!requireNamespace("nnet", quietly = TRUE)) {
+  install.packages("nnet")
+  library(nnet)
+}
+```
+
+All the necessary functions are in `R/po_tite_crm.R`, so you can run the following code to load all the functions.
+
+```{r}
+source("R/po_tite_crm.R")
+```
+
+For running simulation, you need the following:
+
+1. Vector with true toxicity probabilities (`true_tox_vec`). This contains the true probability of DLT of K dose levels.
+
+2. Matrix of partial ordering (`po_mat`). Each row corresponds to ordering of K doses. For each row, the entry corresponds to the index of the dose level represented in the true toxicity probability vector. Number of partial ordering can be arbitrary. If there's only one ordering, then PO-TITE-CRM reduces to TITE-CRM.
+
+3. Matrix of skeletons (`skeleton_mat`) for each partial ordering. For each partial ordering, prior toxicity probability is assigned for each dose level. The probabilities in each row should be monotonically increasing.
+
+4. Target toxicity probability (`target_pt`). Max toxicity probability that will be tolerated.
+
+5. Max patients (`max_patients`). Total niumber of patients to accrue.
+
+```{r}
+# true toxicity matrix
+true_tox_mat <- matrix(c(
+  0.05, 0.09, 0.13, 
+  0.15, 0.2 , 0.25,
+  0.29, 0.32, 0.35
+  ), byrow = TRUE, nrow = 3, ncol = 3)
+true_tox_vec <- dlt_mat_to_vec <- as.vector(true_tox_mat)
+names(true_tox_vec) <- c("P0.5+H2", "P0.5+H3", "P0.5+H5", 
+                         "P0.75+H2", "P0.75+H3", "P0.75+H5",
+                         "P1.0+H2", "P1.0+H3", "P1.0+H5")
+print("True toxicity probability vector:")
+print(true_tox_vec)
+
+# matrix of partial ordering
+po_mat <- matrix(NA, nrow = 4, ncol = 9)
+po_mat[1,] <- c(1,2,3,4,5,6,7,8,9)
+po_mat[2,] <- c(1,4,7,2,5,8,3,6,9)
+po_mat[3,] <- c(1,2,4,3,5,7,6,8,9)
+po_mat[4,] <- c(1,4,2,7,5,3,8,6,9)
+
+print("Partial ordering matrix:")
+print(po_mat)
+
+# matrix of skeleton corresponding for each partial ordering
+skeleton_mat <- matrix(
+  rep(c(0.05, 0.08, 0.10, 0.13, 0.15, 0.18, 0.22, 0.25, 0.35), 4),
+  nrow = 4, ncol = 9, byrow = TRUE
+)
+
+print("Skeleton matrix:")
+print(skeleton_mat)
+```
+
+`begin_sim()` runs a single simulation given the configuration. This function doesn't have to be directly used, but is useful for checking that the variables are set up correctly.
+
+This function returns a list. `data` contains the patient level data, such as enrollment date, what dose (index corresponding to `true_tox_vec`) they were assigned, whether they experienced DLT, and the time to toxicity.
+
+```{r}
+sim_result <- begin_sim(
+  true_tox_vec = true_tox_vec,
+  po_mat = po_mat,
+  skeleton_mat = skeleton_mat,
+  target_pt = 0.25,
+  max_patients = 25,
+  verbose = FALSE
+)
+
+print(sim_result)
+```
+
+`simulate_trials()` is used to run the simulation `N` times. This function returns operating characteristics of the design using the output of `begin_sim()` function. It's suggested that you edit the function directly to report characteristics of interest.
+
+```{r}
+simulate_trials <- function(
+    true_tox_vec,
+    po_mat,
+    skeleton_mat,
+    target_pt = 0.25,
+    N = 100,
+    verbose = FALSE
+) {
+  operating_char <- list(
+    MTD = integer(N),
+    n_enrolled = integer(N),
+    adverse_event_rate = numeric(N)
+  )
+  
+  for (i in 1:N) {
+    sim_data <- begin_sim(
+      true_tox_vec = true_tox_vec,
+      po_mat = po_mat,
+      skeleton_mat = skeleton_mat,
+      target_pt = 0.25,
+      verbose = verbose
+    )
+    
+    operating_char[["MTD"]][i] <- sim_data$MTD
+    operating_char[["n_enrolled"]][i] <- sim_data$n_enrolled
+    operating_char[["adverse_event_rate"]][i] <- mean(sim_data$data$tox)
+    operating_char[["n_adverse_events"]][i] <- sum(sim_data$data$tox, na.rm = TRUE)
+  }
+  
+  return(operating_char)
+}
+
+op_char <- simulate_trials(
+  true_tox_vec = true_tox_vec,
+  po_mat = po_mat,
+  skeleton_mat = skeleton_mat,
+  target_pt = 0.25,
+  N = 100,
+  verbose = FALSE
+)
+
+# table of selected MTD
+print(table(op_char$MTD))
+# average number of DLTS
+print(mean(op_char$n_adverse_events))
+```
+
