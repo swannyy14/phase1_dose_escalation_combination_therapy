@@ -87,11 +87,14 @@ enroll_patient <- function(
   }
   
   for (i in 1:n) {
+    total_enrolled <- patient_data$n_enrolled + 1
+    
     if (verbose) 
       print(paste0(
         "Enrolling new patient: date - ", enrollment_date,
         ", dose - ", assigned_dose,
-        ", toxic prob - ", true_tox_vec[assigned_dose])
+        ", toxic prob - ", true_tox_vec[assigned_dose],
+        ", total enrolled -", total_enrolled)
       )
     patient_data$data[n_enrolled + i, "enrollment_date"] <- enrollment_date
     patient_data$data[n_enrolled + i, "dose_assignment"] <- assigned_dose
@@ -481,7 +484,7 @@ begin_sim <- function(
   
 }
 
-set.seed(17)
+set.seed(123)
 sim_data <- begin_sim(
   true_tox_vec = true_tox_vec,
   po_mat = po_mat,
