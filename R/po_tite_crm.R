@@ -167,11 +167,11 @@ begin_sim <- function(
   current_date <- 0
   
   # begin with first dose
-  next_dose <- 5
-  zone <- 1 # for initial dose escalation
+  zone <- 5 # for initial dose escalation
   treatment_esc_order <- c(
     1,2,4,3,5,7,6,8,9
   )
+  next_dose <- treatment_esc_order[zone]
   
   if (verbose) print("Begin step 1...")
   while (is_step1_phase & patient_data$n_enrolled < max_patients) {
@@ -209,20 +209,29 @@ begin_sim <- function(
       is_step1_phase <- FALSE
     } else if (all(response == 1)) {
       # if all toxic response
-      if (verbose) print("Both toxicity observed at beginning")
       
-      sim_result <- list(
-        data = patient_data$data,
-        n_enrolled = patient_data$n_enrolled,
-        MTD = 1
-      )
+      if (zone > 1) { 
+        # if still not at lowest dose, then de-escalate
+        zone <- zone - 1
+        next_dose <- treatment_esc_order[zone]
+      } else { 
+        # if at lowest dose, stop trial
+        if (verbose) print("Both toxicity observed at beginning")
+        
+        sim_result <- list(
+          data = patient_data$data,
+          n_enrolled = patient_data$n_enrolled,
+          MTD = 1
+        )
+        
+        return(sim_result)
+      }
       
-      return(sim_result)
     } else {
       # if all no response
       if (zone < 9) {
         zone <- zone + 1
-        next_dose <- treatment_esc_order[[zone]][sample(length(treatment_esc_order[[zone]]), 1)]
+        next_dose <- treatment_esc_order[zone]
       } else {
         # it could be that there's delayed DLT for dose 9
         if (!all(tox_time == 0)) {
@@ -259,6 +268,7 @@ begin_sim <- function(
   
   # continue dose finding until 25 patients are enrolled
   while (patient_data$n_enrolled < max_patients) {
+    # enroll the next set of patients based on next recomended dose
     patient_data <- enroll_patient(
       patient_data, 
       enrollment_date = current_date, 
@@ -267,6 +277,7 @@ begin_sim <- function(
       verbose = verbose
     )
     
+    # increment current date
     current_date <- current_date + 30
     
     if (patient_data$n_enrolled > max_patients) {
@@ -291,6 +302,31 @@ begin_sim <- function(
     }
     
     next_dose <- po_tite_crm_out$next_dose
+    
+    # Early stopping criteria 1: if the next recommended dose already has 
+    # more than 10 patients assigned, stop trying and recommend that dose
+    if (sum(patient_data$data$dose_assignment == next_dose, na.rm=TRUE) > 10) {
+      sim_result <- list(
+        data = patient_data$data,
+        n_enrolled = patient_data$n_enrolled,
+        MTD = next_dose
+      )
+      return(sim_result)
+    }
+    
+    # Early stopping criteria 2: if there is more than 2 patient assigned to
+    # the lowest dose and P(DLT) for lowest dose is > 0.35
+    if (next_dose == 1) {
+      p_dlt_lowest_dose <- skeleton_mat[po_tite_crm_out$partial_order,1]^po_tite_crm_out$a_mle
+      if (p_dlt_lowest_dose > 0.35 & sum(patient_data$data$dose_assignment == 1, na.rm = TRUE) >= 3) {
+        sim_result <- list(
+          data = patient_data$data,
+          n_enrolled = patient_data$n_enrolled,
+          MTD = 1
+        )
+        return(sim_result)
+      }
+    }
   }
   
   sim_result <- list(
