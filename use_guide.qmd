@@ -59,7 +59,18 @@ print(true_tox_vec)
 
 # matrix of dose grid and partial ordering
 dose_grid <- generate_dose_grid(true_tox_mat)
-po_mat <- generate_orderings_matrix(dose_grid)
+#po_mat <- generate_orderings_matrix(dose_grid)
+
+nr <- nrow(dose_grid)
+nc <- ncol(dose_grid)
+total <- nr * nc
+po_mat <- matrix(NA, nrow = 6, ncol = total)
+po_mat[1,] = c(1, 2, 3, 4, 5, 6, 7, 8, 9)
+po_mat[2,] = c(1, 4, 7, 2, 5, 8, 3, 6, 9)
+po_mat[3,] = c(1, 2, 4, 3, 5, 7, 6, 8, 9)
+po_mat[4,] = c(1, 4, 2, 7, 5, 3, 8, 6, 9)
+po_mat[5,] = c(1, 2, 4, 7, 5, 3, 6, 8, 9)
+po_mat[6,] = c(1, 4, 2, 3, 5, 7, 8, 6, 9)
 
 print("Partial ordering matrix:")
 print(po_mat)
@@ -68,8 +79,9 @@ print(po_mat)
 skeleton_vec <- c(0.05, 0.08, 0.10, 0.13, 0.15, 0.18, 0.22, 0.25, 0.35)
 skeleton_mat <- generate_skeleton_mat(po_mat, skeleton_vec)
 
-print("Skeleton matrix:")
-print(skeleton_mat)
+skeleton_df <- as.data.frame(skeleton_mat)
+colnames(skeleton_df) <- names(true_tox_vec)
+skeleton_df
 ```
 
 `begin_sim()` runs a single simulation given the configuration. This function doesn't have to be directly used, but is useful for checking that the variables are set up correctly.
@@ -139,4 +151,5 @@ print(table(op_char$MTD))
 # average number of DLTS
 print(mean(op_char$n_adverse_events))
 ```
+
 
