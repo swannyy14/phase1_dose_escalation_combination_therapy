@@ -45,7 +45,7 @@ enroll_patient <- function(
     if (n_enrolled == (nrow(patient_data$data) - 1)) {
       n <- 1
     } else {
-      n <- sample(c(1,2), 1)
+      n <- sample(c(1,2), prob = c(0.8, 0.2), 1)
     }
   }
   
@@ -167,7 +167,7 @@ begin_sim <- function(
   current_date <- 0
   
   # begin with first dose
-  next_dose <- 1
+  next_dose <- 5
   zone <- 1 # for initial dose escalation
   treatment_esc_order <- c(
     1,2,4,3,5,7,6,8,9
