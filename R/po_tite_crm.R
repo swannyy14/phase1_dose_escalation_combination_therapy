@@ -344,6 +344,7 @@ simulate_trials <- function(
     po_mat,
     skeleton_mat,
     target_pt = 0.25,
+    max_patients = 25,
     N = 100,
     verbose = FALSE
 ) {
@@ -358,7 +359,8 @@ simulate_trials <- function(
       true_tox_vec = true_tox_vec,
       po_mat = po_mat,
       skeleton_mat = skeleton_mat,
-      target_pt = 0.25,
+      target_pt = target_pt,
+      max_patients = max_patients,
       verbose = verbose
     )
     

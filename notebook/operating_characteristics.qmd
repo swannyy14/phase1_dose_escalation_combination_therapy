@@ -1,0 +1,428 @@
+---
+title: "Operating Characteristics Under Different Scenarios"
+format: 
+  html:
+    embed-resources: true
+---
+
+## Initialize
+
+```{r}
+library(tidyverse)
+library(nnet)
+library(knitr)
+library(kableExtra)
+library(dfcrm)
+
+source("../R/po_tite_crm.R")
+source("../R/generate_mat.R")
+```
+
+## Setup Simulation
+
+Partial ordering matrix and skeleton
+
+```{r}
+po_mat <- matrix(NA, nrow = 6, ncol = 9)
+po_mat[1,] = c(1, 2, 3, 4, 5, 6, 7, 8, 9)
+po_mat[2,] = c(1, 4, 7, 2, 5, 8, 3, 6, 9)
+po_mat[3,] = c(1, 2, 4, 3, 5, 7, 6, 8, 9)
+po_mat[4,] = c(1, 4, 2, 7, 5, 3, 8, 6, 9)
+po_mat[5,] = c(1, 2, 4, 7, 5, 3, 6, 8, 9)
+po_mat[6,] = c(1, 4, 2, 3, 5, 7, 8, 6, 9)
+
+print(po_mat)
+```
+
+```{r}
+skeleton_mat <- matrix(
+  rep(c(0.05, 0.08, 0.1, 0.13, 0.15, 0.18, 0.22, 0.25, 0.35),times = nrow(po_mat)),
+  nrow = nrow(po_mat), ncol = ncol(po_mat), byrow = TRUE
+)
+```
+Other parameters:
+
+```{r}
+# target tox probability
+target_pt <- 0.25
+# number of patients
+max_patients <- 25
+```
+
+Operating characteristics simulation function
+
+```{r}
+simulate_trials <- function(
+    true_tox_vec,
+    po_mat,
+    skeleton_mat,
+    target_pt = 0.25,
+    max_patients = 25,
+    N = 100,
+    verbose = FALSE,
+    include_patient_data = FALSE
+) {
+  operating_char <- list(
+    MTD = integer(N),
+    n_enrolled = integer(N),
+    adverse_event_rate = numeric(N),
+    max_day = integer(N),
+    n_assigned_by_dose = integer(length(true_tox_vec)),
+    n_dlt_by_dose = integer(length(true_tox_vec)),
+    n_sim = N
+  )
+  
+  if (include_patient_data) {
+    operating_char$patient_data <- list()
+  }
+  
+  
+  for (i in 1:N) {
+    sim_data <- begin_sim(
+      true_tox_vec = true_tox_vec,
+      po_mat = po_mat,
+      skeleton_mat = skeleton_mat,
+      target_pt = target_pt,
+      max_patients = max_patients,
+      verbose = verbose
+    )
+    
+    if (include_patient_data) {
+      operating_char[["patient_data"]][[i]] <- sim_data$data
+    }
+    
+    # basic operating characteristics
+    operating_char[["MTD"]][i] <- sim_data$MTD
+    operating_char[["n_enrolled"]][i] <- sim_data$n_enrolled
+    operating_char[["adverse_event_rate"]][i] <- 
+      mean(sim_data$data$tox, na.rm=TRUE)
+    operating_char[["max_day"]][i] <- max(sim_data$data$enrollment_date, na.rm=TRUE)
+    
+    # get number of individuals assigned to each dose and number of DLTs
+    dose_data <- sim_data$data %>%
+      filter(!is.na(dose_assignment)) %>%
+      group_by(dose_assignment) %>%
+      summarise(
+        n = n(),
+        n_dlt = sum(tox)
+      )
+    
+    operating_char$n_assigned_by_dose[dose_data$dose_assignment] <- 
+      operating_char$n_assigned_by_dose[dose_data$dose_assignment] + dose_data$n
+    
+    operating_char$n_dlt_by_dose[dose_data$dose_assignment] <- 
+      operating_char$n_dlt_by_dose[dose_data$dose_assignment] + dose_data$n_dlt
+  }
+  
+  return(operating_char)
+}
+
+clean_results <- function(op_char, true_tox_vec) {
+  op_table <- tibble(
+    Treatment = names(true_tox_vec),
+    true_p_dlt = true_tox_vec
+  ) %>%
+    mutate(
+      p_select_mtd = as.integer(table(op_char$MTD)) / length(op_char$MTD),
+      avg_num_assigned = op_char$n_assigned_by_dose / op_char$n_sim,
+      avg_num_dlt = op_char$n_dlt_by_dose / op_char$n_sim
+    ) %>%
+    pivot_longer(
+      cols = c("true_p_dlt", "p_select_mtd", "avg_num_assigned", "avg_num_dlt"),
+      names_to = "op_char",
+      values_to = "value"
+    ) %>%
+    pivot_wider(
+      id_cols = "op_char",
+      names_from = "Treatment",
+      values_from = "value"
+    )
+  
+  print(paste("Average number of patients enrolled:", mean(op_char$n_enrolled)))
+  print(paste("Average number of days until last enrollment:", mean(op_char$max_day)))
+  
+  return(op_table)
+}
+```
+
+
+### Scenario 1
+
+```{r}
+# true toxicity matrix
+scen <- c(
+  0.05, 0.08, 0.10,
+  0.13, 0.15, 0.18,
+  0.20, 0.25, 0.35
+)
+true_tox_mat <- matrix(scen, byrow = TRUE, nrow = 3, ncol = 3)
+true_tox_vec <- dlt_mat_to_vec <- as.vector(true_tox_mat)
+names(true_tox_vec) <- c("P0.5+H2", "P0.5+H3", "P0.5+H5", 
+                         "P0.75+H2", "P0.75+H3", "P0.75+H5",
+                         "P1.0+H2", "P1.0+H3", "P1.0+H5")
+print("True toxicity probability vector:")
+print(true_tox_vec)
+```
+
+```{r}
+#| echo: false
+set.seed(123)
+
+op_char <- simulate_trials(
+  true_tox_vec = true_tox_vec,
+  po_mat = po_mat,
+  skeleton_mat = skeleton_mat,
+  target_pt = target_pt,
+  max_patients = max_patients,
+  N = 1000,
+  include_patient_data = FALSE
+)
+
+op_table <- op_char %>%
+  clean_results(true_tox_vec)
+```
+
+Compare to TITE-CRM
+
+```{r}
+#| include: FALSE
+po_index <- 3
+trueprob <- true_tox_vec[po_mat[po_index,]]
+prior <- skeleton_mat[po_index,]
+
+tite_out <- titesim(
+  PI = trueprob, prior = prior, target = target_pt, n = max_patients, x0 = 5,
+  nsim = 1000, obswin = 56, tgrp = 30, rate = 1.2, accrual = "fixed",
+  seed = 123, restrict = FALSE
+)
+```
+
+Combine the PO-TITE-CRM and TITE-CRM Results:
+
+```{r}
+tite_select_probs <- tibble(
+    dose_name = names(trueprob[po_mat[po_index,]]),
+    tite_p_select_mtd = tite_out$MTD[po_mat[po_index,]]
+  ) %>% 
+  pivot_wider(names_from = dose_name, values_from = tite_p_select_mtd) %>%
+  mutate(op_char = "tite_p_select_mtd")
+
+op_table <- op_table %>%
+  bind_rows(tite_select_probs) %>%
+  mutate(op_char = if_else(op_char == "p_select_mtd", "po_tite_p_select_mtd", op_char))
+
+op_table %>%
+  kable() %>%
+  kable_styling()
+```
+
+
+### Scenario 2
+
+```{r}
+# true toxicity matrix
+scen <- c(
+  0.20, 0.30, 0.45,
+  0.25, 0.30, 0.45,
+  0.30, 0.45, 0.50
+)
+true_tox_mat <- matrix(scen, byrow = TRUE, nrow = 3, ncol = 3)
+true_tox_vec <- dlt_mat_to_vec <- as.vector(true_tox_mat)
+names(true_tox_vec) <- c("P0.5+H2", "P0.5+H3", "P0.5+H5", 
+                         "P0.75+H2", "P0.75+H3", "P0.75+H5",
+                         "P1.0+H2", "P1.0+H3", "P1.0+H5")
+print("True toxicity probability vector:")
+print(true_tox_vec)
+```
+
+```{r}
+#| echo: false
+set.seed(123)
+
+op_char <- simulate_trials(
+  true_tox_vec = true_tox_vec,
+  po_mat = po_mat,
+  skeleton_mat = skeleton_mat,
+  target_pt = target_pt,
+  max_patients = max_patients,
+  N = 1000,
+  include_patient_data = FALSE
+)
+
+op_table <- op_char %>%
+  clean_results(true_tox_vec)
+```
+
+Compare to TITE-CRM
+
+```{r}
+#| include: FALSE
+po_index <- 3
+trueprob <- true_tox_vec[po_mat[po_index,]]
+prior <- skeleton_mat[po_index,]
+
+tite_out <- titesim(
+  PI = trueprob, prior = prior, target = target_pt, n = max_patients, x0 = 5,
+  nsim = 1000, obswin = 56, tgrp = 30, rate = 1.2, accrual = "fixed",
+  seed = 123, restrict = FALSE
+)
+```
+
+Combine the PO-TITE-CRM and TITE-CRM Results:
+
+```{r}
+tite_select_probs <- tibble(
+    dose_name = names(trueprob[po_mat[po_index,]]),
+    tite_p_select_mtd = tite_out$MTD[po_mat[po_index,]]
+  ) %>% 
+  pivot_wider(names_from = dose_name, values_from = tite_p_select_mtd) %>%
+  mutate(op_char = "tite_p_select_mtd")
+
+op_table <- op_table %>%
+  bind_rows(tite_select_probs) %>%
+  mutate(op_char = if_else(op_char == "p_select_mtd", "po_tite_p_select_mtd", op_char))
+
+op_table %>%
+  kable() %>%
+  kable_styling()
+```
+
+### Scenario 3
+
+```{r}
+# true toxicity matrix
+scen <- c(
+  0.05, 0.06, 0.08,
+  0.09, 0.11, 0.14,
+  0.14, 0.20, 0.35
+)
+true_tox_mat <- matrix(scen, byrow = TRUE, nrow = 3, ncol = 3)
+true_tox_vec <- dlt_mat_to_vec <- as.vector(true_tox_mat)
+names(true_tox_vec) <- c("P0.5+H2", "P0.5+H3", "P0.5+H5", 
+                         "P0.75+H2", "P0.75+H3", "P0.75+H5",
+                         "P1.0+H2", "P1.0+H3", "P1.0+H5")
+print("True toxicity probability vector:")
+print(true_tox_vec)
+```
+
+```{r}
+#| echo: false
+set.seed(123)
+
+op_char <- simulate_trials(
+  true_tox_vec = true_tox_vec,
+  po_mat = po_mat,
+  skeleton_mat = skeleton_mat,
+  target_pt = target_pt,
+  max_patients = max_patients,
+  N = 1000,
+  include_patient_data = FALSE
+)
+
+op_table <- op_char %>%
+  clean_results(true_tox_vec)
+```
+
+Compare to TITE-CRM
+
+```{r}
+#| include: FALSE
+po_index <- 3
+trueprob <- true_tox_vec[po_mat[po_index,]]
+prior <- skeleton_mat[po_index,]
+
+tite_out <- titesim(
+  PI = trueprob, prior = prior, target = target_pt, n = max_patients, x0 = 5,
+  nsim = 1000, obswin = 56, tgrp = 30, rate = 1.2, accrual = "fixed",
+  seed = 123, restrict = FALSE
+)
+```
+
+Combine the PO-TITE-CRM and TITE-CRM Results:
+
+```{r}
+tite_select_probs <- tibble(
+    dose_name = names(trueprob[po_mat[po_index,]]),
+    tite_p_select_mtd = tite_out$MTD[po_mat[po_index,]]
+  ) %>% 
+  pivot_wider(names_from = dose_name, values_from = tite_p_select_mtd) %>%
+  mutate(op_char = "tite_p_select_mtd")
+
+op_table <- op_table %>%
+  bind_rows(tite_select_probs) %>%
+  mutate(op_char = if_else(op_char == "p_select_mtd", "po_tite_p_select_mtd", op_char))
+
+op_table %>%
+  kable() %>%
+  kable_styling()
+```
+
+### Scenario 4
+
+```{r}
+# true toxicity matrix
+scen <- c(
+  0.05, 0.12, 0.22,
+  0.06, 0.14, 0.28,
+  0.08, 0.16, 0.35
+)
+true_tox_mat <- matrix(scen, byrow = TRUE, nrow = 3, ncol = 3)
+true_tox_vec <- dlt_mat_to_vec <- as.vector(true_tox_mat)
+names(true_tox_vec) <- c("P0.5+H2", "P0.5+H3", "P0.5+H5", 
+                         "P0.75+H2", "P0.75+H3", "P0.75+H5",
+                         "P1.0+H2", "P1.0+H3", "P1.0+H5")
+print("True toxicity probability vector:")
+print(true_tox_vec)
+```
+
+```{r}
+#| echo: false
+set.seed(123)
+
+op_char <- simulate_trials(
+  true_tox_vec = true_tox_vec,
+  po_mat = po_mat,
+  skeleton_mat = skeleton_mat,
+  target_pt = target_pt,
+  max_patients = max_patients,
+  N = 1000,
+  include_patient_data = FALSE
+)
+
+op_table <- op_char %>%
+  clean_results(true_tox_vec)
+```
+
+Compare to TITE-CRM
+
+```{r}
+#| include: FALSE
+po_index <- 3
+trueprob <- true_tox_vec[po_mat[po_index,]]
+prior <- skeleton_mat[po_index,]
+
+tite_out <- titesim(
+  PI = trueprob, prior = prior, target = target_pt, n = max_patients, x0 = 5,
+  nsim = 1000, obswin = 56, tgrp = 30, rate = 1.2, accrual = "fixed",
+  seed = 123, restrict = FALSE
+)
+```
+
+Combine the PO-TITE-CRM and TITE-CRM Results:
+
+```{r}
+tite_select_probs <- tibble(
+    dose_name = names(trueprob[po_mat[po_index,]]),
+    tite_p_select_mtd = tite_out$MTD[po_mat[po_index,]]
+  ) %>% 
+  pivot_wider(names_from = dose_name, values_from = tite_p_select_mtd) %>%
+  mutate(op_char = "tite_p_select_mtd")
+
+op_table <- op_table %>%
+  bind_rows(tite_select_probs) %>%
+  mutate(op_char = if_else(op_char == "p_select_mtd", "po_tite_p_select_mtd", op_char))
+
+op_table %>%
+  kable() %>%
+  kable_styling()
+```
