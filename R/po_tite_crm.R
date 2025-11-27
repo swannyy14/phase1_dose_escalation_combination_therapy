@@ -315,10 +315,10 @@ begin_sim <- function(
     }
     
     # Early stopping criteria 2: if there is more than 2 patient assigned to
-    # the lowest dose and P(DLT) for lowest dose is > 0.35
+    # the lowest dose and P(DLT) for lowest dose is > 0.33
     if (next_dose == 1) {
       p_dlt_lowest_dose <- skeleton_mat[po_tite_crm_out$partial_order,1]^po_tite_crm_out$a_mle
-      if (p_dlt_lowest_dose > 0.35 & sum(patient_data$data$dose_assignment == 1, na.rm = TRUE) >= 3) {
+      if (p_dlt_lowest_dose > 0.33 & sum(patient_data$data$dose_assignment == 1, na.rm = TRUE) >= 3) {
         sim_result <- list(
           data = patient_data$data,
           n_enrolled = patient_data$n_enrolled,

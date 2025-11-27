@@ -1,0 +1,118 @@
+---
+title: "Plotting Likelihood Across Partial Orders"
+format: html
+---
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(nnet)
+
+source("../R/po_tite_crm.R")
+source("../R/generate_mat.R")
+```
+
+```{r}
+po_mat <- matrix(NA, nrow = 6, ncol = 9)
+po_mat[1,] = c(1, 2, 3, 4, 5, 6, 7, 8, 9)
+po_mat[2,] = c(1, 4, 7, 2, 5, 8, 3, 6, 9)
+po_mat[3,] = c(1, 2, 4, 3, 5, 7, 6, 8, 9)
+po_mat[4,] = c(1, 4, 2, 7, 5, 3, 8, 6, 9)
+po_mat[5,] = c(1, 2, 4, 7, 5, 3, 6, 8, 9)
+po_mat[6,] = c(1, 4, 2, 3, 5, 7, 8, 6, 9)
+
+print(po_mat)
+
+skeleton_mat <- matrix(
+  rep(c(0.05, 0.08, 0.1, 0.13, 0.15, 0.18, 0.22, 0.25, 0.35),times = nrow(po_mat)),
+  nrow = nrow(po_mat), ncol = ncol(po_mat), byrow = TRUE
+)
+
+# target tox probability
+target_pt <- 0.25
+# number of patients
+max_patients <- 25
+
+# true toxicity matrix
+scen <- c(
+  0.05, 0.08, 0.10,
+  0.13, 0.15, 0.18,
+  0.20, 0.25, 0.35
+)
+true_tox_mat <- matrix(scen, byrow = TRUE, nrow = 3, ncol = 3)
+true_tox_vec <- dlt_mat_to_vec <- as.vector(true_tox_mat)
+names(true_tox_vec) <- c("P0.5+H2", "P0.5+H3", "P0.5+H5", 
+                         "P0.75+H2", "P0.75+H3", "P0.75+H5",
+                         "P1.0+H2", "P1.0+H3", "P1.0+H5")
+print("True toxicity probability vector:")
+print(true_tox_vec)
+```
+
+Run a single simulation.
+
+```{r}
+set.seed(102)
+sim_result <- begin_sim(
+  true_tox_vec = true_tox_vec,
+  po_mat = po_mat,
+  skeleton_mat = skeleton_mat
+)
+```
+
+Caclulate log likelihood for each partial ordering
+
+```{r}
+a <- seq(0, 3, by = 0.01)[-1]
+
+# matrix of log likelihoods for each partial order
+ll_mat <- matrix(NA, ncol = nrow(po_mat), nrow = length(a))
+
+for (i in 1:nrow(po_mat)) {
+  alpha_i <- skeleton_mat[i,][match(sim_result$data$dose_assignment, po_mat[i,])]
+  response_i <- sim_result$data$tox
+  weights <- 1
+  ll_mat[,i] <- map_dbl(a, \(x) calc_log_lik(x, response = response_i, alph = alpha_i, weights = weights))
+}
+
+colnames(ll_mat) <- paste0("PO", 1:ncol(ll_mat))
+ll_df <- as_tibble(ll_mat) %>%
+  mutate(a = a) %>%
+  pivot_longer(
+    cols = starts_with("PO"),
+    names_to = "PO",
+    values_to = "LogLik"
+  )
+
+max_po <- which.max(apply(ll_mat, 2, max))
+a_mle_index <- which.max(ll_mat[,max_po])
+a_mle <- a[a_mle_index]
+max_loglik <- ll_mat[a_mle_index,max_po]
+
+PO_colors <- RColorBrewer::brewer.pal(6, "Dark2")
+names(PO_colors) <- paste0("PO", 1:6)
+
+ggplot(ll_df) +
+  geom_line(aes(x = a, y = LogLik, color = PO)) +
+  geom_segment(
+    x = a_mle, y = -30, xend = a_mle,
+    yend = max_loglik, linetype = "dashed",
+    color = PO_colors[1]
+  ) +
+  geom_point(
+    x = a_mle, y = max_loglik,
+    color = PO_colors[1]
+  ) +
+  coord_cartesian(xlim = c(0.5, 1.0), ylim = c(-15, -11)) +
+  scale_color_manual(values = PO_colors) +
+  ggtitle("Log Likelihood by Partial Order") +
+  xlab(expression(a[m])) +
+  ylab("Log Likelihood") +
+  geom_text(
+    x = a_mle, y = max_loglik + 0.5, 
+    label = "Partial Order 1 has\nhighest maximized likelihood",
+    color = PO_colors[1]
+  ) +
+  theme_bw(base_size = 14)
+```
+
