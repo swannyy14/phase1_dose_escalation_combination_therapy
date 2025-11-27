@@ -4,7 +4,7 @@ library(knitr)
 library(kableExtra)
 library(dfcrm)
 
-# choose the two helper files (first: po_tite_crm.R, second: generate_mat.R)
+
 source(file.choose())
 source(file.choose())
 
