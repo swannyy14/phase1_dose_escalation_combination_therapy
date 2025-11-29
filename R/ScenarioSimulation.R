@@ -4,9 +4,10 @@ library(knitr)
 library(kableExtra)
 library(dfcrm)
 
+set.seed(123)
 
-source(file.choose())
-source(file.choose())
+source("R/po_tite_crm.R")
+source("R/generate_mat.R")
 
 po_mat <- matrix(NA, nrow = 6, ncol = 9)
 po_mat[1, ] <- c(1, 2, 3, 4, 5, 6, 7, 8, 9)
@@ -88,18 +89,30 @@ simulate_trials <- function(
 }
 
 clean_results <- function(op_char, true_tox_vec) {
-  cat("Average number of patients enrolled:", mean(op_char$n_enrolled), "\n")
-  cat("Average last enrollment day:", mean(op_char$max_day), "\n")
-
-  tibble(
-    Dose = names(true_tox_vec),
-    true_p_dlt = true_tox_vec,
-    p_select_mtd = as.numeric(
-      table(factor(op_char$MTD, levels = seq_along(true_tox_vec)))
-    ) / op_char$n_sim,
-    avg_num_assigned = op_char$n_assigned_by_dose / op_char$n_sim,
-    avg_num_dlt = op_char$n_dlt_by_dose / op_char$n_sim
-  )
+  op_table <- tibble(
+    Treatment = names(true_tox_vec),
+    true_p_dlt = true_tox_vec
+  ) %>%
+    mutate(
+      p_select_mtd = as.integer(table(op_char$MTD)) / length(op_char$MTD),
+      avg_num_assigned = op_char$n_assigned_by_dose / op_char$n_sim,
+      avg_num_dlt = op_char$n_dlt_by_dose / op_char$n_sim
+    ) %>%
+    pivot_longer(
+      cols = c("true_p_dlt", "p_select_mtd", "avg_num_assigned", "avg_num_dlt"),
+      names_to = "op_char",
+      values_to = "value"
+    ) %>%
+    pivot_wider(
+      id_cols = "op_char",
+      names_from = "Treatment",
+      values_from = "value"
+    )
+  
+  print(paste("Average number of patients enrolled:", mean(op_char$n_enrolled)))
+  print(paste("Average number of days until last enrollment:", mean(op_char$max_day)))
+  
+  return(op_table)
 }
 
 dose_names <- c(
