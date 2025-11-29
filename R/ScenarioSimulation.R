@@ -94,7 +94,7 @@ clean_results <- function(op_char, true_tox_vec) {
     true_p_dlt = true_tox_vec
   ) %>%
     mutate(
-      p_select_mtd = as.integer(table(op_char$MTD)) / length(op_char$MTD),
+      p_select_mtd = as.integer(table(factor(op_char$MTD, levels = 1:9))) / length(op_char$MTD),
       avg_num_assigned = op_char$n_assigned_by_dose / op_char$n_sim,
       avg_num_dlt = op_char$n_dlt_by_dose / op_char$n_sim
     ) %>%
@@ -127,16 +127,28 @@ scen1 <- c(
   0.20, 0.25, 0.35
 )
 
-scen2 <- c(
-  0.20, 0.30, 0.45,
-  0.25, 0.30, 0.45,
-  0.30, 0.45, 0.50
+scen2_a <- c(
+  0.03, 0.06, 0.07,
+  0.09, 0.10, 0.13,
+  0.15, 0.17, 0.24
 )
 
-scen3 <- c(
-  0.05, 0.06, 0.08,
-  0.09, 0.11, 0.14,
-  0.14, 0.20, 0.35
+scen2_b <- c(
+  0.03, 0.09, 0.15,
+  0.06, 0.10, 0.17,
+  0.07, 0.13, 0.24
+)
+
+scen3_a <- c(
+  0.07, 0.10, 0.13,
+  0.17, 0.20, 0.23,
+  0.29, 0.35, 0.45
+)
+
+scen3_b <- c(
+  0.07, 0.17, 0.29,
+  0.10, 0.20, 0.35,
+  0.13, 0.23, 0.45
 )
 
 scen4 <- c(
@@ -177,8 +189,10 @@ scen9 <- c(
 
 scenario_list <- list(
   scen1 = scen1,
-  scen2 = scen2,
-  scen3 = scen3,
+  scen2_a = scen2_a,
+  scen2_b = scen2_b,
+  scen3_a = scen3_a,
+  scen3_b = scen3_b,
   scen4 = scen4,
   scen5 = scen5,
   scen6 = scen6,
@@ -193,7 +207,7 @@ for (k in seq_along(scenario_list)) {
   cat("\n================ Scenario", k, "================\n")
   scen_vec <- scenario_list[[k]]
 
-  true_tox_mat <- matrix(scen_vec, byrow = TRUE, nrow = 3, ncol = 3)
+  true_tox_mat <- matrix(scen_vec, byrow = FALSE, nrow = 3, ncol = 3)
   true_tox_vec <- as.vector(true_tox_mat)
   names(true_tox_vec) <- dose_names
 
@@ -215,3 +229,6 @@ for (k in seq_along(scenario_list)) {
   results_list[[k]] <- res_tbl
 }
 
+results_list[[5]][,-1] %>% 
+  kable %>%
+  kable_styling

@@ -123,7 +123,7 @@ clean_results <- function(op_char, true_tox_vec) {
     true_p_dlt = true_tox_vec
   ) %>%
     mutate(
-      p_select_mtd = as.integer(table(op_char$MTD)) / length(op_char$MTD),
+      p_select_mtd = as.integer(table(factor(op_char$MTD, levels = 1:9))) / length(op_char$MTD),
       avg_num_assigned = op_char$n_assigned_by_dose / op_char$n_sim,
       avg_num_dlt = op_char$n_dlt_by_dose / op_char$n_sim
     ) %>%
